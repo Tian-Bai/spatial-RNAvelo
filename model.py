@@ -29,7 +29,59 @@ class SingleCellDataset(Dataset):
         cell_data = torch.stack([self.unspliced[index, :], self.spliced[index, :]], dim=1)
         return cell_data
     
+class CountPrediction(nn.Module):
+    def __init__(self, cell_size, gene_size):
+        super(CountPrediction, self).__init__()
+
+        #TODO: Change size to number of genes
+        self.k = nn.Parameter(torch.randn(gene_size))
+        self.d = nn.Parameter(torch.randn(gene_size))
+        self.t0_g3 = nn.Parameter(torch.randn(gene_size))
+        
+        #remove and change to function call
+        self.u0_g3 = nn.Parameter(torch.randn(gene_size))
+        self.t = nn.Parameter(torch.randn(cell_size, gene_size))
+
+    def S_trans(self, t):
+        return 1 / (1 + torch.exp(-self.k * (t - self.t0_g3 - self.d)))
+    
+    def predict_u(self, alpha, beta, S):
+        tilde_u = ((alpha / beta) * (1 - torch.exp(-beta * self.t)) * (1 - S) +
+                   (alpha / beta) * S +
+                   (self.u0_g3 * torch.exp(-beta * (self.t - self.t0_g3)) - (alpha / beta)) * S)
+        
+        return tilde_u
+    
+    def predict_s(self, alpha, beta, gamma, S):
+        tilde_s = (((alpha / gamma) * (1 - torch.exp(-gamma * self.t)) +
+                    (alpha / (gamma - beta)) * (torch.exp(-gamma * self.t) - torch.exp(-beta * self.t))) * (1 - S) +
+                   (alpha / gamma) * S +
+                   (beta * self.u0_g3 / (gamma - beta) * (torch.exp(-gamma * (self.t - self.t0_g3)) - torch.exp(-beta * (self.t - self.t0_g3)))) * S)
+
+        return tilde_s
+
+    def predict(self, out, t):
+        # [num_cells, num_genes, 3] 
+        alpha = out[:, :, 0] 
+        gamma = out[:, :, 1]  
+        beta = out[:, :, 2]   
+
+        # Compute S_trans for each cell
+        S = self.S_trans(t)
+
+        # Compute tilde_u and tilde_s for each cell
+        tilde_u = CountPrediction.predict_u(alpha, beta, S)
+        tilde_s = CountPrediction.predict_s(alpha, beta, gamma, S)
+
+        return tilde_u, tilde_s
+
+    def forward(self, out, t):
+        return self.predict(out)
+    
+
 class GAT(nn.Module):
+    def softmax_time():
+        return
     def __init__(self, num_genes, out_channels=4):
         #4 out channels, alpha beta gamma and time t
         super(GAT, self).__init__()
@@ -58,8 +110,4 @@ class GAT(nn.Module):
         # Combine outputs for all genes, resulting in a tensor of shape [num_cells, num_genes, 3]
         out = torch.stack(outs, dim=1)
 
-        #TODO add equation predicting u/s
-        return F.log_softmax(out, dim=-1)
-    
-        #TODO find a way to estimate t*
-        #TODO : gene wise graph, forward returns equation is calculated in overleaf, get gene wise time switching time, loss will be spatially checked in neighborhood
+        return 
