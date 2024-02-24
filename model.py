@@ -16,11 +16,15 @@ class SingleCellDataset(Dataset):
         scv.pp.filter_and_normalize(self.adata, min_shared_counts=20, n_top_genes=2000)
         scv.pp.moments(self.adata, n_neighbors=30, n_pcs=30)
 
-        self.unspliced = pd.DataFrame(self.adata.layers['unspliced'],columns=self.adata.to_df().columns)
-        self.spliced = pd.DataFrame(self.adata.layers['spliced'],columns=self.adata.to_df().columns)
+        # seems cannot directly do 'pd.dataframe' on sparse matrix (?); will give a shape mismatch error
 
-        #Add similarity matrix
+        self.unspliced = self.adata.to_df(layer='unspliced')
+        self.spliced = self.adata.to_df(layer='spliced')
 
+        # self.unspliced = pd.DataFrame(self.adata.layers['unspliced'], columns=self.adata.to_df().columns)
+        # self.spliced = pd.DataFrame(self.adata.layers['spliced'], columns=self.adata.to_df().columns)
+
+        # Add similarity matrix
 
     def __len__(self):
         return self.unspliced.shape[0]
