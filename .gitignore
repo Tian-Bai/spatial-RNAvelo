@@ -1,5 +1,6 @@
 # large scRNAseq / ST data
-*.h5ad
+chicken_heart/
+DLPFC_151673/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

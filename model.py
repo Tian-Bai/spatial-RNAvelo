@@ -1,37 +1,12 @@
 import torch
-from torch.utils.data import Dataset
-import scanpy as sc
-import scvelo as scv
-import pandas as pd
+import numpy as np
 from torch_geometric.nn import GATConv
 import torch.nn.functional as F
 from torch import nn
+from sklearn.neighbors import kneighbors_graph, radius_neighbors_graph
+from sklearn.metrics import pairwise_distances
 
-class SingleCellDataset(Dataset):
-    def __init__(self, adata_path, filter_normalize = True):
-        self.adata = sc.read(adata_path)
-
-
-
-        scv.pp.filter_and_normalize(self.adata, min_shared_counts=20, n_top_genes=2000)
-        scv.pp.moments(self.adata, n_neighbors=30, n_pcs=30)
-
-        # seems cannot directly do 'pd.dataframe' on sparse matrix (?); will give a shape mismatch error
-
-        self.unspliced = self.adata.to_df(layer='unspliced')
-        self.spliced = self.adata.to_df(layer='spliced')
-
-        # self.unspliced = pd.DataFrame(self.adata.layers['unspliced'], columns=self.adata.to_df().columns)
-        # self.spliced = pd.DataFrame(self.adata.layers['spliced'], columns=self.adata.to_df().columns)
-
-        # Add similarity matrix
-
-    def __len__(self):
-        return self.unspliced.shape[0]
-    
-    def __getitem__(self, index):
-        cell_data = torch.stack([self.unspliced[index, :], self.spliced[index, :]], dim=1)
-        return cell_data
+import data
     
 class CountPrediction(nn.Module):
     def __init__(self, cell_size, gene_size):
@@ -86,8 +61,9 @@ class CountPrediction(nn.Module):
 class GAT(nn.Module):
     def softmax_time():
         return
+    
     def __init__(self, num_genes, out_channels=4):
-        #4 out channels, alpha beta gamma and time t
+        # 4 out channels, alpha beta gamma and time t
         super(GAT, self).__init__()
         self.num_genes = num_genes
         self.in_channels = 2
