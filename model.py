@@ -2,12 +2,13 @@ import torch
 import numpy as np
 from torch_geometric.nn import GATConv
 import torch.nn.functional as F
+import torch_geometric.transforms as T
 from torch import nn
-from sklearn.neighbors import kneighbors_graph, radius_neighbors_graph
-from sklearn.metrics import pairwise_distances
 
 import data
-    
+
+'''
+'''
 class CountPrediction(nn.Module):
     def __init__(self, cell_size, gene_size):
         super(CountPrediction, self).__init__()
@@ -57,30 +58,44 @@ class CountPrediction(nn.Module):
     def forward(self, out, t):
         return self.predict(out)
     
+'''
+GAT Implementation
+One GAT model for each gene, they are totally uncorrelated
 
-class GAT(nn.Module):
-    def softmax_time():
-        return
-    
-    def __init__(self, num_genes, out_channels=4):
-        # 4 out channels, alpha beta gamma and time t
+Graph vertices: cells
+Graph edges: similarity (xy distance, gene expression distance) between cells
+    --option: kNN
+    --option: ?
+Input (vertices attributes): expression, u, s data for each cell
+Output: alpha, beta, gamma for each cell
+    --question: do we need t?
+    --question: if t should be the same across genes, how to realize this restriction?
+'''
+class GAT(nn.Module):    
+    def __init__(self, num_genes, heads):
+        # 3 out channels, alpha beta gamma (t?)
         super(GAT, self).__init__()
         self.num_genes = num_genes
-        self.in_channels = 2
-        self.out_channels = out_channels
+        self.in_channel_size = 2 # or 3?
+        self.mid_channel_size = 3
+        # could test using more middle layer / different sizes?
+
+        self.out_channel_size = 3
+        self.heads = heads # number of attention heads
         
         self.convs = nn.ModuleList()
         self.bns = nn.ModuleList()
         for _ in range(num_genes):
-            self.convs.append(GATConv(self.in_channels, 8, heads=8, dropout=0.6, concat=True))
-            self.bns.append(nn.BatchNorm1d(8 * 8))
+            self.convs.append(GATConv(self.in_channel_size, self.mid_channel_size, heads=heads, concat=True, dropout=0.6))
+            self.bns.append(nn.BatchNorm1d(self.heads * self.mid_channel_size))
 
-        self.final_conv = GATConv(8 * 8, self.out_channels, heads=1, concat=False, dropout=0.6)
+        # why use the same final layer?
+        self.final_conv = GATConv(self.heads * self.mid_channel_size, self.out_channel_size, heads=1, concat=False, dropout=0.6)
 
-    def forward(self, data_list):
+    def forward(self, gene_data_list):
         outs = []
-        for i, data in enumerate(data_list):
-            x, edge_index, edge_weight = data.x, data.edge_index, data.edge_attr
+        for i, gene_data in enumerate(gene_data_list):
+            x, edge_index, edge_weight = gene_data.x, gene_data.edge_index, gene_data.edge_attr
             x = F.elu(self.convs[i](x, edge_index, edge_weight=edge_weight))
             x = self.bns[i](x)
             x = F.dropout(x, p=0.6, training=self.training)
@@ -89,5 +104,4 @@ class GAT(nn.Module):
 
         # Combine outputs for all genes, resulting in a tensor of shape [num_cells, num_genes, 3]
         out = torch.stack(outs, dim=1)
-
-        return 
+        return out
