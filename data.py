@@ -61,9 +61,10 @@ class SingleCellDataset(Dataset):
         self.g.add_edges(src, dst)
         self.g.add_edges(dst, src)
 
-    def create_torch_geometric_data(self, edges, gene_index):
-        # Convert edges to a PyTorch tensor
-        edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
+    def create_torch_geometric_data(self, gene_index):
+
+        src, dst = self.g.edges()
+        edge_index = torch.stack((src, dst), dim=0)
 
         unspliced_gene = self.unspliced[:, gene_index] 
         spliced_gene = self.spliced[:, gene_index]
