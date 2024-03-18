@@ -13,14 +13,15 @@ class CountPrediction(nn.Module):
     def __init__(self, cell_size, gene_size):
         super(CountPrediction, self).__init__()
 
-        #TODO: Change size to number of genes
-        self.k = nn.Parameter(torch.randn(gene_size))
-        self.d = nn.Parameter(torch.randn(gene_size))
-        self.t0_g3 = nn.Parameter(torch.randn(gene_size))
+        self.k = nn.Parameter(torch.rand(gene_size))
+        self.d = nn.Parameter(torch.rand(gene_size))
+
+        #Switching time and the u/s count at that time
+        self.t0_g3 = nn.Parameter(torch.rand(gene_size))
+        self.u0_g3 = nn.Parameter(torch.rand(gene_size))
+        self.s0_g3 = nn.Parameter(torch.rand(gene_size))
         
-        #remove and change to function call
-        self.u0_g3 = nn.Parameter(torch.randn(gene_size))
-        self.t = nn.Parameter(torch.randn(cell_size, gene_size))
+        self.t = nn.Parameter(torch.rand(cell_size, gene_size))
 
     def S_trans(self, t):
         return 1 / (1 + torch.exp(-self.k * (t - self.t0_g3 - self.d)))
@@ -47,7 +48,7 @@ class CountPrediction(nn.Module):
         beta = out[:, :, 2]   
 
         # Compute S_trans for each cell
-        S = self.S_trans(t)
+        S = self.S_trans(self.t)
 
         # Compute tilde_u and tilde_s for each cell
         tilde_u = CountPrediction.predict_u(alpha, beta, S)
@@ -105,3 +106,12 @@ class GAT(nn.Module):
         # Combine outputs for all genes, resulting in a tensor of shape [num_cells, num_genes, 3]
         out = torch.stack(outs, dim=1)
         return out
+    
+def switch_loss(u_switch, s_switch, top_u, top_s):
+    switch_loss = torch.sum((u_switch-top_u)**2 + (s_switch-top_s)**2)
+    return switch_loss
+
+def count_loss(pred_u, pred_s, u, s):
+    count_loss = torch.mean((u-pred_u)**2 + (s-pred_s)**2)
+    return count_loss
+
