@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from torch_geometric.data import Data
 from torch.utils.data import Dataset, DataLoader
 import scanpy as sc
 import scvelo as scv
@@ -59,6 +60,20 @@ class SingleCellDataset(Dataset):
         src, dst = tuple(zip(*edge_list))
         self.g.add_edges(src, dst)
         self.g.add_edges(dst, src)
+
+    def create_torch_geometric_data(self, edges, gene_index):
+        # Convert edges to a PyTorch tensor
+        edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
+
+        unspliced_gene = self.unspliced[:, gene_index] 
+        spliced_gene = self.spliced[:, gene_index]
+
+        node_features = torch.stack((unspliced_gene, spliced_gene), dim=1) 
+
+        data = Data(x=node_features, edge_index=edge_index)
+
+        return data
+
     
     def __len__(self):
         return self.unspliced.shape[0]
