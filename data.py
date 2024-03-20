@@ -22,21 +22,22 @@ class SingleCellDataset(Dataset):
 
         self.unspliced = self.adata.to_df(layer='unspliced')
         self.spliced = self.adata.to_df(layer='spliced')
-        self.xy = self.adata.obs[['array_row', 'array_col']] 
+        
+        # self.xy = self.adata.obs[['array_row', 'array_col']] 
+        self.xy = self.adata.obsm['X_xy_loc']
+
         self.n_cell, self.n_gene = self.spliced.shape
         # the name could depend on actual dataset
 
         # self.unspliced = pd.DataFrame(self.adata.layers['unspliced'], columns=self.adata.to_df().columns)
         # self.spliced = pd.DataFrame(self.adata.layers['spliced'], columns=self.adata.to_df().columns)
 
-        self.get_graph()
+        # for the graph, of the form (src[], dst[]) (2 1-d array)
+        self.edges = None
 
-    def get_graph(self, k=50, c_expr=0.2, c_xy=0.8):
+    def process_graph(self, k=50, c_expr=0.2, c_xy=0.8):
         # using mixed distance of expression and xy, and then do kNN graph
         # NOTE: what could be a good choice of c?
-
-        self.g = dgl.graph()
-        self.g.add_nodes(self.n_cell)
         edge_list = []
 
         # if cell number is small, could brute force
@@ -58,21 +59,19 @@ class SingleCellDataset(Dataset):
             for j in close_ind[i]:
                 edge_list.append((i, j))
         src, dst = tuple(zip(*edge_list))
-        self.g.add_edges(src, dst)
-        self.g.add_edges(dst, src)
 
+        self.edges = (src, dst)
+
+    # build the data with a subset of gene (selected by indices)
     def create_torch_geometric_data(self, gene_index):
-
-        src, dst = self.g.edges()
+        src, dst = self.edges
         edge_index = torch.stack((src, dst), dim=0)
 
         unspliced_gene = self.unspliced[:, gene_index] 
         spliced_gene = self.spliced[:, gene_index]
 
         node_features = torch.stack((unspliced_gene, spliced_gene), dim=1) 
-
         data = Data(x=node_features, edge_index=edge_index)
-
         return data
 
     
