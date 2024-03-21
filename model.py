@@ -16,7 +16,7 @@ class CountPrediction(nn.Module):
         self.k = nn.Parameter(torch.rand(gene_size))
         self.d = nn.Parameter(torch.rand(gene_size))
 
-        #Switching time and the u/s count at that time
+        # Switching time and the u/s count at that time
         self.t0_g3 = nn.Parameter(torch.rand(gene_size))
         self.u0_g3 = nn.Parameter(torch.rand(gene_size))
         self.s0_g3 = nn.Parameter(torch.rand(gene_size))
@@ -73,10 +73,11 @@ Output: alpha, beta, gamma for each cell
     --question: if t should be the same across genes, how to realize this restriction?
 '''
 class GAT(nn.Module):    
-    def __init__(self, num_genes, heads):
+    def __init__(self, n_cell, n_gene, heads):
         # 3 out channels, alpha beta gamma (t?)
         super(GAT, self).__init__()
-        self.num_genes = num_genes
+        self.n_cell, self.n_gene = n_cell, n_gene
+
         self.in_channel_size = 2 # or 3?
         self.mid_channel_size = 3
         # could test using more middle layer / different sizes?
@@ -86,16 +87,18 @@ class GAT(nn.Module):
         
         self.convs = nn.ModuleList()
         self.bns = nn.ModuleList()
-        for _ in range(num_genes):
+        for _ in range(self.n_gene):
             self.convs.append(GATConv(self.in_channel_size, self.mid_channel_size, heads=heads, concat=True, dropout=0.6))
             self.bns.append(nn.BatchNorm1d(self.heads * self.mid_channel_size))
 
         # why use the same final layer?
         self.final_conv = GATConv(self.heads * self.mid_channel_size, self.out_channel_size, heads=1, concat=False, dropout=0.6)
+        self.cp = CountPrediction(self.n_cell, self.n_gene)
 
-    def forward(self, gene_data_list):
+    def predict(self, gene_list):
         outs = []
-        for i, gene_data in enumerate(gene_data_list):
+        # for each gene
+        for i, gene_data in enumerate(gene_list):
             x, edge_index, edge_weight = gene_data.x, gene_data.edge_index, gene_data.edge_attr
             x = F.elu(self.convs[i](x, edge_index, edge_weight=edge_weight))
             x = self.bns[i](x)
@@ -107,6 +110,14 @@ class GAT(nn.Module):
         out = torch.stack(outs, dim=1)
         return out
     
+    def forward(self, gene_list):
+        # alpha beta gamma's
+        out = self.predict(gene_list)
+        tilde_u, tilde_s = self.cp(out)
+        return tilde_u, tilde_s
+
+# Question - intuitive meaning of this loss?
+# see VeloVi implementation at https://github.com/YosefLab/velovi/blob/main/velovi/_module.py#L488
 def switch_loss(u_switch, s_switch, top_u, top_s):
     switch_loss = torch.sum((u_switch-top_u)**2 + (s_switch-top_s)**2)
     return switch_loss
