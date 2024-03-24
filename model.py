@@ -41,7 +41,7 @@ class CountPrediction(nn.Module):
 
         return tilde_s
 
-    def predict(self, out, t):
+    def predict(self, out):
         # [num_cells, num_genes, 3] 
         alpha = out[:, :, 0] 
         gamma = out[:, :, 1]  
@@ -51,12 +51,12 @@ class CountPrediction(nn.Module):
         S = self.S_trans(self.t)
 
         # Compute tilde_u and tilde_s for each cell
-        tilde_u = CountPrediction.predict_u(alpha, beta, S)
-        tilde_s = CountPrediction.predict_s(alpha, beta, gamma, S)
+        tilde_u = self.predict_u(alpha, beta, S)
+        tilde_s = self.predict_s(alpha, beta, gamma, S)
 
         return tilde_u, tilde_s
 
-    def forward(self, out, t):
+    def forward(self, out):
         return self.predict(out)
     
 '''
@@ -95,24 +95,25 @@ class GAT(nn.Module):
         self.final_conv = GATConv(self.heads * self.mid_channel_size, self.out_channel_size, heads=1, concat=False, dropout=0.6)
         self.cp = CountPrediction(self.n_cell, self.n_gene)
 
-    def predict(self, gene_list):
+    def predict(self, gene_data, gene_index):
         outs = []
         # for each gene
-        for i, gene_data in enumerate(gene_list):
-            x, edge_index, edge_weight = gene_data.x, gene_data.edge_index, gene_data.edge_attr
-            x = F.elu(self.convs[i](x, edge_index, edge_weight=edge_weight))
-            x = self.bns[i](x)
-            x = F.dropout(x, p=0.6, training=self.training)
-            x = self.final_conv(x, edge_index, edge_weight=edge_weight)
-            outs.append(x)
+        #for i, gene_data in enumerate(gene_list):
+        x, edge_index, edge_weight = gene_data.x, gene_data.edge_index, gene_data.edge_attr
+        x = x.float()
+        x = F.elu(self.convs[gene_index](x, edge_index))
+        x = self.bns[gene_index](x)
+        x = F.dropout(x, p=0.6, training=self.training)
+        x = self.final_conv(x, edge_index)
+        outs.append(x)
 
         # Combine outputs for all genes, resulting in a tensor of shape [num_cells, num_genes, 3]
         out = torch.stack(outs, dim=1)
         return out
     
-    def forward(self, gene_list):
+    def forward(self, gene_data, gene_index):
         # alpha beta gamma's
-        out = self.predict(gene_list)
+        out = self.predict(gene_data, gene_index)
         tilde_u, tilde_s = self.cp(out)
         return tilde_u, tilde_s
 
