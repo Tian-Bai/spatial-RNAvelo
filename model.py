@@ -13,15 +13,15 @@ class CountPrediction(nn.Module):
     def __init__(self, cell_size, gene_size):
         super(CountPrediction, self).__init__()
 
-        self.k = nn.Parameter(torch.rand(gene_size))
-        self.d = nn.Parameter(torch.rand(gene_size))
+        self.k = nn.Parameter(torch.zeros(gene_size))
+        self.d = nn.Parameter(torch.zeros(gene_size))
 
         # Switching time and the u/s count at that time
-        self.t0_g3 = nn.Parameter(torch.rand(gene_size))
-        self.u0_g3 = nn.Parameter(torch.rand(gene_size))
-        self.s0_g3 = nn.Parameter(torch.rand(gene_size))
+        self.t0_g3 = nn.Parameter(torch.zeros(gene_size))
+        self.u0_g3 = nn.Parameter(torch.zeros(gene_size))
+        self.s0_g3 = nn.Parameter(torch.zeros(gene_size))
         
-        self.t = nn.Parameter(torch.rand(cell_size, gene_size))
+        self.t = nn.Parameter(torch.zeros(cell_size, gene_size))
 
     def S_trans(self, t):
         return 1 / (1 + torch.exp(-self.k * (t - self.t0_g3 - self.d)))
@@ -86,25 +86,25 @@ class GAT(nn.Module):
         self.heads = heads # number of attention heads
         
         self.convs = nn.ModuleList()
+        self.final_convs = nn.ModuleList()
         self.bns = nn.ModuleList()
         for _ in range(self.n_gene):
             self.convs.append(GATConv(self.in_channel_size, self.mid_channel_size, heads=heads, concat=True, dropout=0.6))
             self.bns.append(nn.BatchNorm1d(self.heads * self.mid_channel_size))
+            self.final_convs.append(GATConv(self.heads * self.mid_channel_size, self.out_channel_size, heads=1, concat=False, dropout=0.6))
 
-        # why use the same final layer?
-        self.final_conv = GATConv(self.heads * self.mid_channel_size, self.out_channel_size, heads=1, concat=False, dropout=0.6)
         self.cp = CountPrediction(self.n_cell, self.n_gene)
 
     def predict(self, gene_data, gene_index):
         outs = []
         # for each gene
-        #for i, gene_data in enumerate(gene_list):
+        # for i, gene_data in enumerate(gene_list):
         x, edge_index, edge_weight = gene_data.x, gene_data.edge_index, gene_data.edge_attr
         x = x.float()
         x = F.elu(self.convs[gene_index](x, edge_index))
         x = self.bns[gene_index](x)
         x = F.dropout(x, p=0.6, training=self.training)
-        x = self.final_conv(x, edge_index)
+        x = self.final_convs[gene_index](x, edge_index)
         outs.append(x)
 
         # Combine outputs for all genes, resulting in a tensor of shape [num_cells, num_genes, 3]

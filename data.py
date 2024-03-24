@@ -40,20 +40,25 @@ class SingleCellDataset(Dataset):
         # NOTE: what could be a good choice of c?
         edge_list = []
 
-        # if cell number is small, could brute force
-        #if self.n_cell < 3000:
+        '''
+        if cell number is small, could brute force
+        if self.n_cell < 3000:
+        '''
         expr_dist = pairwise_distances(self.spliced)
         xy_dist = pairwise_distances(self.xy)
         dist = c_expr * expr_dist + c_xy * xy_dist
         close_ind = np.argsort(dist, axis=1)[:, :k] 
-        '''else: # could use hnswlib
+        '''
+        else: 
+            # could use hnswlib
             # NOTE: should we use pca first? n_gene could be huge
             # NOTE: this does not support mixed distance
             knn = hnswlib.Index(space="l2", dim=self.n_gene)
             knn.init_index(max_elements=self.n_cell, ef_construction=200, M=30) # the later 2 are coef for runtime/accuracy optims
             knn.add_items(self.xy)
             knn.set_ef(k)
-            close_ind = knn.knn_query(self.xy, k=k)[0].astype(int)'''
+            close_ind = knn.knn_query(self.xy, k=k)[0].astype(int)
+        '''
 
         for i in range(close_ind.shape[0]):
             for j in close_ind[i]:
@@ -74,8 +79,8 @@ class SingleCellDataset(Dataset):
         return data
     
     def get_cells_by_gene(self, gene_index):
-        unspliced_gene = torch.tensor(self.unspliced.iloc[:, gene_index].values)
-        spliced_gene = torch.tensor(self.spliced.iloc[:, gene_index].values)  
+        unspliced_gene = torch.tensor(self.unspliced.iloc[:, gene_index].values, dtype=torch.float64)
+        spliced_gene = torch.tensor(self.spliced.iloc[:, gene_index].values, dtype=torch.float64)  
 
         return torch.stack((unspliced_gene, spliced_gene), dim=1) 
     
