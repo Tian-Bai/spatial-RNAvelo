@@ -3,6 +3,7 @@ import torch.optim as optim
 import torch
 import model
 import matplotlib.pyplot as plt
+import wandb
 
 num_epochs = 10000
 
@@ -36,7 +37,7 @@ def train(dataset):
             # switch_loss_value = 0
             total_loss = count_loss_value + switch_loss_value
 
-            print(total_loss)
+            wandb.log({"loss": total_loss})
 
             total_loss.backward()
             optimizer.step()
@@ -45,6 +46,7 @@ if __name__ == "__main__":
     scrna_path = "chicken_heart\\RNA_D14_adata.h5ad"
     st_path = "chicken_heart\\Visium_D14_adata.h5ad"
 
+    wandb.init(project = "GAT-rna-velo")
     dataset = data.SingleCellDataset(st_path)
     dataset.process_graph()
     train(dataset)
