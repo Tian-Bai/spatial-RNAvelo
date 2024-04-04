@@ -1,6 +1,10 @@
 # large scRNAseq / ST data
 chicken_heart/
 DLPFC_151673/
+wandb/
+
+# debugging text
+*.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
