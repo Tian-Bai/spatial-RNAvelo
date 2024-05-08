@@ -51,13 +51,14 @@ class CountPrediction(nn.Module):
         beta = out[:, 2]   
 
         with torch.no_grad():
+            # should we use large or small value here?
             for i in range(len(beta)):
                 if beta[i] == 0:
-                    beta[i] += np.random.uniform(1e-6, 1e-5)
+                    beta[i] += np.random.uniform(0.5, 1)
                 if beta[i] == gamma[i]:
-                    beta[i] += np.random.uniform(1e-6, 1e-5)
+                    beta[i] += np.random.uniform(0.5, 1)
                 if gamma[i] == 0:
-                    gamma[i] += np.random.uniform(1e-6, 1e-5)
+                    gamma[i] += np.random.uniform(0.5, 1)
 
         # Compute S_trans for each cell
         S = self.S_trans(gene_index, self.t)

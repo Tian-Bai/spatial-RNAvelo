@@ -27,7 +27,6 @@ def train(dataset):
             u = dataset.get_cells_by_gene(gene_index)[:, 0]
             s = dataset.get_cells_by_gene(gene_index)[:, 1]
             tilde_u, tilde_s = model_gat(gene_graph, gene_index)
-            print(f"shapes: {tilde_u.shape}, {u.shape}")
 
             count_loss_value = model.count_loss(tilde_u, tilde_s, u, s)
             if torch.isnan(count_loss_value):
