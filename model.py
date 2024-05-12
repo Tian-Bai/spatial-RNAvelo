@@ -83,7 +83,6 @@ Graph edges: similarity (xy distance, gene expression distance) between cells
 Input (vertices attributes): expression, u, s data for each cell
 Output: alpha, beta, gamma for each cell
     --question: do we need t?
-    --question: if t should be the same across genes, how to realize this restriction?
 '''
 class GAT(nn.Module):    
     def __init__(self, n_cell, n_gene, layers, heads):
