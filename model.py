@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from torch_geometric.nn import GATConv
+from torch_geometric import nn as gnn
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from torch import nn
@@ -11,6 +11,11 @@ import scvelo as scv
 import pandas as pd
 from matplotlib import pyplot as plt
 
+''' 
+in-channels: number of genes * 2 = dimension of spliced/unspliced conbined
+latent_dim: dimension of latent representation
+need to train VAE first
+'''
 class VAE(nn.Module):
     def __init__(self, in_channels, latent_dim=32, hidden_dims=[64, 32], beta=4):
         super(nn.Module, self).__init__()
@@ -73,8 +78,87 @@ class VAE(nn.Module):
         loss = recon_loss + self.beta * kl_loss
         return loss, recon_loss, kl_loss
     
+''' 
+in_channels: 2 + dimension of VAE low-dim representation
+out_channels: dimension of gradient representation
+'''
 class MLP_regression(nn.Module):
-    pass
+    def __init__(self, in_channels, hidden_dims=[64, 64], out_channels=32):
+        super(nn.Module, self).__init__()
+        self.in_channels = in_channels
+        self.hidden_dims = hidden_dims
+        self.out_channels = out_channels
 
+        all_dim = [in_channels] + hidden_dims + [out_channels]
+        modules = []
+        for i in range(len(all_dim) - 1):
+            modules.append(
+                nn.Sequential(
+                    nn.Linear(in_features=all_dim[i], out_features=all_dim[i+1]),
+                    # batchnorm?
+                    nn.ReLU()
+                )
+            )
+        self.mlp = nn.Sequential(*modules)
+
+    def forward(self, input):
+        return self.mlp(input)
+
+'''
+in_channels: dimension of VAE low-dim representation
+graph structure: from x-y data
+out_channels: dimension of gradient representation
+by default, use 1-head attention.
+'''
 class GAT_interpolation(nn.Module):
-    pass
+    def __init__(self, in_channels, hidden_dims=[32, 32], out_channels=32):
+        super(nn.Module, self).__init__()
+        self.in_channels = in_channels
+        self.hidden_dims = hidden_dims
+        self.out_channels = out_channels
+
+        all_dim = [in_channels] + hidden_dims 
+
+        # GAT part
+        modules = []
+        for i in range(len(all_dim) - 1):
+            modules.append(
+                nn.Sequential(
+                    gnn.GATConv(all_dim[i], all_dim[i+1], heads=1, dropout=0.1),
+                    nn.ReLU()
+                )
+            )
+        self.gat = gnn.Sequential(*modules)
+        self.final_linear = nn.Linear(hidden_dims[-1], out_channels)
+
+    def forward(self, x, edge_index):
+        res = self.gat(x, edge_index)
+        return self.final_linear(res)
+    
+''' 
+in_channel: dimension of VAE low-dim representation
+out_channel: number of genes * 4 (4 gradients for each gene)
+latent_dim: dimension of gradient representation
+'''
+class GradientModel(nn.Module):
+    def __init__(self, in_channels, out_channels, latent_dim=32):
+        super(nn.Module, self).__init__()
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        self.out_channels = out_channels
+
+        self.regression = MLP_regression(self.in_channels + 2, out_channels=latent_dim)
+        self.interpolation = GAT_interpolation(self.in_channels, out_channels=latent_dim)
+
+        # for averaging
+        self.alphas = torch.full(latent_dim, fill_value=0.5)
+        self.final_linear = nn.Sequential(
+            nn.Linear(latent_dim, out_channels),
+            nn.ReLU()
+        )
+
+    def forward(self, x, edge_index):
+        regre = self.regression(x)
+        interp = self.interpolation(x, edge_index)
+        out = regre * self.alphas + interp * (1 - self.alphas)
+        return self.final_linear(out)
