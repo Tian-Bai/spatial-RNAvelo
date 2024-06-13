@@ -3,6 +3,9 @@ chicken_heart/
 DLPFC_151673/
 wandb/
 
+# saved model
+.pth
+
 # debugging text
 *.txt
 

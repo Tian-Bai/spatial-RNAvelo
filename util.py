@@ -4,6 +4,7 @@ import pandas as pd
 from matplotlib import cm 
 from matplotlib import pyplot as plt
 import scvelo as scv
+from torch.utils.data import Dataset, DataLoader
 
 '''
 Input: xy - [n x 2] array for the coordinate of points.
@@ -63,7 +64,7 @@ def numeric_gradient(xy_new, A, threshold=1):
     Dx = np.nan * np.empty_like(A)
     Dy = np.nan * np.empty_like(A)
     xlen, ylen, d = A.shape
-    grad = []
+    xgrad, ygrad = [], []
 
     for q in xy_new:
         i, j = int(q[0]), int(q[1])
@@ -97,33 +98,42 @@ def numeric_gradient(xy_new, A, threshold=1):
         if avail != 0:
             Dy[i][j] = diff / avail
 
-        grad.append([Dx[i][j], Dy[i][j]])
-    return np.array(grad), Dx, Dy
+        xgrad.append(Dx[i][j])
+        ygrad.append(Dy[i][j])
+    return np.array(xgrad), np.array(ygrad), Dx, Dy
 
-# test
+class SpatialDataset(Dataset):
+    def __init__(self, xy, s, u, transform=None):
+        assert len(xy) == len(s) and len(s) == len(u)
+        self.xy = xy
+        self.s = s
+        self.u = u
+        self.transform = transform
 
-scrna_path = "chicken_heart\\RNA_D14_adata.h5ad"
-st_path = "chicken_heart\\Visium_D14_adata.h5ad"
+    def __len__(self):
+        return len(self.xy)
+    
+    def __getitem__(self, idx):
+        sample = self.xy[idx], self.s[idx], self.u[idx]
 
-st = scv.read(st_path)
-u = st.to_df('unspliced').to_numpy()
-s = st.to_df('spliced').to_numpy()
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
 
-xy = st.obsm['X_xy_loc']
-z = np.column_stack((s))
-A, xy_new, _, _ = discretize(xy, z, 180)
+class SpatialGradientDataset(Dataset):
+    def __init__(self, xy, latent, grad, transform=None):
+        assert len(xy) == len(latent) and len(latent) == len(grad)
+        self.xy = xy
+        self.latent = latent
+        self.grad = grad
+        self.transform = transform
 
-grad, Dx, Dy = numeric_gradient(xy_new, A) 
-# now the grad could be feeded as feature, for xy
+    def __len__(self):
+        return len(self.xy)
+    
+    def __getitem__(self, idx):
+        sample = self.xy[idx], self.latent[idx], self.grad[idx]
 
-fig, axs = plt.subplots(figsize=(20, 13), nrows = 2, ncols = 2)
-
-xx, yy = np.where(~np.isnan(A[:, :, 0]))
-axs[0, 0].scatter(xx, yy, s=3)
-
-xx, yy = np.where(~np.isnan(Dx[:, :, 0]))
-axs[0, 1].scatter(xx, yy, s=3)
-
-xx, yy = np.where(~np.isnan(Dy[:, :, 0]))
-axs[1, 0].scatter(xx, yy, s=3)
-plt.show()
+        if self.transform:
+            sample = self.transform(sample)
+        return sample

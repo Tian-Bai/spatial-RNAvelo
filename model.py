@@ -18,7 +18,7 @@ need to train VAE first
 '''
 class VAE(nn.Module):
     def __init__(self, in_channels, latent_dim=32, hidden_dims=[64, 32], beta=4):
-        super(nn.Module, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         self.latent_dim = latent_dim
         self.hidden_dims = hidden_dims
@@ -42,10 +42,10 @@ class VAE(nn.Module):
 
         # decoder
         modules = []
-        for i in range(len(all_dim), 0, -1):
+        for i in range(len(all_dim) - 1, 0, -1):
             modules.append(
                 nn.Sequential(
-                    nn.Linear(in_channels=all_dim[i], out_features=all_dim[i-1]),
+                    nn.Linear(in_features=all_dim[i], out_features=all_dim[i-1]),
                     nn.LeakyReLU()
                 )
             )
@@ -71,11 +71,11 @@ class VAE(nn.Module):
         z = self.reparam(mu, log_var)
         return [self.decode(z), input, mu, log_var]
     
-    def loss(self, recon, input, mu, log_var):
+    def loss(self, recon, input, mu, log_var, mn_scale):
         recon_loss = F.mse_loss(recon, input)
         kl_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
 
-        loss = recon_loss + self.beta * kl_loss
+        loss = recon_loss + self.beta * mn_scale * kl_loss
         return loss, recon_loss, kl_loss
     
 ''' 
@@ -84,7 +84,7 @@ out_channels: dimension of gradient representation
 '''
 class MLP_regression(nn.Module):
     def __init__(self, in_channels, hidden_dims=[64, 64], out_channels=32):
-        super(nn.Module, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         self.hidden_dims = hidden_dims
         self.out_channels = out_channels
@@ -112,7 +112,7 @@ by default, use 1-head attention.
 '''
 class GAT_interpolation(nn.Module):
     def __init__(self, in_channels, hidden_dims=[32, 32], out_channels=32):
-        super(nn.Module, self).__init__()
+        super().__init__()
         self.in_channels = in_channels
         self.hidden_dims = hidden_dims
         self.out_channels = out_channels
@@ -147,7 +147,7 @@ class GradientModel(nn.Module):
         self.latent_dim = latent_dim
         self.out_channels = out_channels
 
-        self.regression = MLP_regression(self.in_channels + 2, out_channels=latent_dim)
+        self.regression = MLP_regression(self.in_channels, out_channels=latent_dim)
         self.interpolation = GAT_interpolation(self.in_channels, out_channels=latent_dim)
 
         # for averaging
