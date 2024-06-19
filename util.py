@@ -122,7 +122,7 @@ class SpatialDataset(Dataset):
 
 class SpatialGradientDataset(Dataset):
     def __init__(self, xy, latent, grad, transform=None):
-        assert len(xy) == len(latent) and len(latent) == len(grad)
+        assert (len(xy) == len(latent)) and len(latent) == len(grad)
         self.xy = xy
         self.latent = latent
         self.grad = grad

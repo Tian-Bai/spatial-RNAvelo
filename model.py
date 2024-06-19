@@ -73,7 +73,7 @@ class VAE(nn.Module):
     
     def loss(self, recon, input, mu, log_var, mn_scale):
         recon_loss = F.mse_loss(recon, input)
-        kl_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
+        kl_loss = -0.5 * torch.mean(torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
 
         loss = recon_loss + self.beta * mn_scale * kl_loss
         return loss, recon_loss, kl_loss
@@ -96,6 +96,7 @@ class MLP_regression(nn.Module):
                 nn.Sequential(
                     nn.Linear(in_features=all_dim[i], out_features=all_dim[i+1]),
                     # batchnorm?
+                    nn.BatchNorm1d(num_features=all_dim[i+1]),
                     nn.ReLU()
                 )
             )
@@ -122,13 +123,10 @@ class GAT_interpolation(nn.Module):
         # GAT part
         modules = []
         for i in range(len(all_dim) - 1):
-            modules.append(
-                nn.Sequential(
-                    gnn.GATConv(all_dim[i], all_dim[i+1], heads=1, dropout=0.1),
-                    nn.ReLU()
-                )
-            )
-        self.gat = gnn.Sequential(*modules)
+            modules.append((gnn.GATConv(all_dim[i], all_dim[i+1], heads=1, dropout=0.5), 'x, edge_index -> x'))
+            modules.append(nn.ReLU())
+
+        self.gat = gnn.Sequential('x, edge_index', modules)
         self.final_linear = nn.Linear(hidden_dims[-1], out_channels)
 
     def forward(self, x, edge_index):
