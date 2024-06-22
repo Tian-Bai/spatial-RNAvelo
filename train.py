@@ -12,10 +12,10 @@ import scvelo as scv
 import pandas as pd
 from matplotlib import pyplot as plt
 import model, util
-import time
 from sklearn.model_selection import train_test_split
 import wandb
-from sklearn.manifold import TSNE
+import scvi
+import umap
 
 LOG = False
 
@@ -30,7 +30,7 @@ scrna_path = "chicken_heart\\RNA_D14_adata.h5ad"
 st_path = "chicken_heart\\Visium_D14_adata.h5ad"
 
 st = scv.read(st_path)
-scv.pp.filter_and_normalize(st, min_shared_counts=20, n_top_genes=100)
+scv.pp.filter_and_normalize(st, min_shared_counts=20, n_top_genes=2000)
 scv.pp.moments(st, n_pcs=30, n_neighbors=30)
 
 u = st.to_df('unspliced').to_numpy()
@@ -54,6 +54,28 @@ xgrad, ygrad, Dx, Dy = util.numeric_gradient(xy_new, A)
 # xx, yy = np.where(~np.isnan(Dy[:, :, 0]))
 # axs[1, 0].scatter(xx, yy, s=3)
 # plt.show()
+''' 
+Part 1.2: use scanpy to do a clustering
+'''
+sc.pp.pca(st)
+sc.pp.neighbors(st)
+sc.tl.umap(st)
+sc.tl.leiden(st, key_added='clusters')
+
+leiden = np.array(st.obs['clusters']).astype(int)
+cell_type = np.array(st.obs['celltype_prediction'])
+cell_type_int = []
+cell_type_dict = {}
+for c in cell_type:
+    if c not in cell_type_dict:
+        cell_type_dict[c] = len(cell_type_dict)
+    cell_type_int.append(cell_type_dict[c])
+
+sc.pl.umap(st, color=['celltype_prediction_max', 'celltype_prediction_mode', 'celltype_prediction', 'region', 'clusters', 'n_counts'], wspace=0.4)
+
+scvi_model = scvi.model.SCVI(st)
+scvi_model.train()
+scvi_latent = scvi_model.get_latent_representation()
 
 ''' 
 Part 2: train the VAE
@@ -170,20 +192,26 @@ with torch.no_grad():
     latent, _ = vae.encode(torch.cat((s, u), dim=1))
 
 # for a further visualization
-VAE_VIS = False
+VAE_VIS = True
 
 if VAE_VIS:
-    tsne = TSNE(n_components=2, random_state=42)
-    latent_tsne = tsne.fit_transform(latent.numpy())
+    umap_reducer = umap.UMAP()
+    vae_latent_umap = umap_reducer.fit_transform(latent.numpy())
 
-    tsne = TSNE(n_components=2, random_state=42)
-    original_tsne = tsne.fit_transform(torch.cat((s, u), dim=1).numpy())
+    umap_reducer = umap.UMAP()
+    original_umap = umap_reducer.fit_transform(torch.cat((s, u), dim=1).numpy())
 
-    fig, axs = plt.subplots(figsize=(20, 10), ncols=2)
+    umap_reducer = umap.UMAP()
+    scvi_latent_umap = umap_reducer.fit_transform(scvi_latent)
 
-    axs[0].scatter(latent_tsne[:, 0], latent_tsne[:, 1], s=3)
-    axs[1].scatter(original_tsne[:, 0], original_tsne[:, 1], s=3)
+    fig, axs = plt.subplots(figsize=(20, 10), ncols=3)
+
+    axs[0].scatter(original_umap[:, 0], original_umap[:, 1], s=3, c=cell_type_int, cmap='tab10')
+    axs[1].scatter(scvi_latent_umap[:, 0], scvi_latent_umap[:, 1], s=3, c=cell_type_int, cmap='tab10')
+    axs[2].scatter(vae_latent_umap[:, 0], vae_latent_umap[:, 1], s=3, c=cell_type_int, cmap='tab10')
     plt.show()
+
+exit(0)
 
 ''' 
 Part 3: train the gradient prediction model
@@ -302,14 +330,15 @@ elif MODEL == 'GAT':
 
                 if LOG_MODEL:
                     wandb.log({'xModel training loss': x_loss.item()})
-        torch.save(x_model.state_dict(), 'xmlp.pth')
+        torch.save(x_model.state_dict(), 'xgat.pth')
     else:
-        x_model.load_state_dict(torch.load('xmlp.pth'))
+        x_model.load_state_dict(torch.load('xgat.pth'))
 
     x_model.eval()
     with torch.no_grad():
         x_predgrad = x_model(torch.cat((torch.tensor(xy), latent), dim=1), edge_index)
 
+# very inconsistent result now
 plt.figure()
 plt.quiver(xy[:, 0], xy[:, 1], x_predgrad[:, 0], x_predgrad[:, 1])
 plt.show()
